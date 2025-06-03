@@ -916,16 +916,187 @@ L_FA <- FA$loadings
 
 Aims to describe relationships between 2 sets of variables $X_{p \times 1}^{(1)}$ and $X_{q \times 1}^{(2)}$ by focusing on the correlation between **linear** combinations of variables in one set to **linear** combinations of variables in another set
 
-Determine pair of linear combinations having largest correlation
-$$
+Determine pair of linear combinations having largest correlation $$
 U_1 = a_{11}X_{1}^{(1)} + \dots + a_{1p}X_p^{(1)}
-$$
-and
-$$
+$$ and $$
 V_1 = b_{11}X_1^{(2)} + \dots + b_{1q}X_q^{(2)}
-$$
-Determine pair of lienar combinations having largest correlation among all pairs uncorrelated with initial pair, and so on
+$$ Determine pair of lienar combinations having largest correlation among all pairs uncorrelated with initial pair, and so on
 
-**Canonical Variables** = The pairs of linear combinations
-**Canonical Correlations** = The correlations between canonical variables, which measure the strength of association between the 2 sets of variable
-Aim is reduction, concentrate high-dimensional relationship between 2 sets of variables into a few pairs of cannonical variables
+**Canonical Variables** = The pairs of linear combinations **Canonical Correlations** = The correlations between canonical variables, which measure the strength of association between the 2 sets of variable Aim is reduction, concentrate high-dimensional relationship between 2 sets of variables into a few pairs of cannonical variables
+
+## Partitioning of the covariance matrix and calculation of correlation between 2 linear combinations
+
+Given the covariance matrix between the variables within a group and between variables from different group
+
+![](images/clipboard-2095839802.png)
+
+p and q are the number of variables assigned to each X
+
+Let the linear combinations be $U = a'X^{(1)}$ and $V = b'X^{(2)}$ then $$
+Var(U) = a'\Sigma_{11}a \\ Var(V) = b'\Sigma_{22}b \\ Covar(U, V) = a'\Sigma_{12}b
+$$ We wish to find vectors $a$ and $b$ such that $$
+Corr(U, V) = \frac{Covar(U,V)}{\sqrt{Var(U)\times Var(V)}}
+$$ is as large as possible
+
+## Expression for canonical coefficients and introduction of R and relationship between $e$ and $f$
+
+$a$ and $b$ that will maximise $Corr(U,V)=\rho_1^*$ are given by $$
+U_1 = e'_1\Sigma_{11}^{-1/2}X^{(1)} \text{ and } V_1 = f'_1\Sigma_{22}^{-1/2}X^{(2)}
+$$ And for the $k^{th}$ pair $$
+U_k = e'_k\Sigma_{11}^{-1/2}X^{(1)} \text{ and } V_k = f'_k\Sigma_{22}^{-1/2}X^{(2)}
+$$ $a_k' = e'_k\Sigma_{11}^{-1/2}$ and $b_k' = f'_k\Sigma_{22}^{-1/2}$
+
+where $\rho_1^{*2} \geq \dots \geq \rho_p^{*2}$ are the eigen values of $$
+R = \Sigma_{11}^{-1/2}\Sigma_{12}\Sigma_{22}^{-1}\Sigma_{21}\Sigma_{11}^{-1/2}
+$$ And associated eigen vectors $e_1, \dots, e_p$
+
+Equivalently $\rho_1^{*2} \geq \dots \geq \rho_p^{*2}$ are the eigen values of $$
+R = \Sigma_{22}^{-1/2}\Sigma_{21}\Sigma_{11}^{-1}\Sigma_{12}\Sigma_{22}^{-1/2}
+$$ And associated eigen vectors $f_1, \dots, f_p$ each of which is proportional to $\Sigma_{22}^{-1/2}\Sigma_{21}\Sigma_{11}^{-1/2}e_i$ (needs standardisation to have unit variance)
+
+## Properties of U and V and formulation in terms of correlation matrix
+
+$$
+Var(U_k) = Var(V_k) = 1 \\ Cov(U_k,U_l) = Corr(U_k,U_l) = 0 \\
+Cov(V_k,V_l) = Corr(V_k,V_l) = 0 \\ Cov(U_k,V_l) = Corr(U_k, V_l) = 0
+$$ for $k \neq l$
+
+If the original variables are standardised, then the canonical variates take the form $$
+U_k = a'_kZ^{(1)}=e'_k\rho_{11}^{-1/2}Z^{(1)} \text{ and } V_k = b'_kZ^{(2)}= f'_k\rho_{22}^{-1/2}Z^{(2)}
+$$ Where $\rho_{11}$ and $\rho_{22}$ are sub-matrices of the corrrelation matrix
+
+## Guide to interpretation and distinction between canonical coefficients and correlations between measured variables and canonical variables
+
+-   Canonical loadings: correlation between a variable set and its corresponding canonical variate (use to interpret canonical variates)
+
+-   Loadings: Interpreted like regression coefficients, measuring impact on canonical variate of 1 unit increase in specified measure variable
+
+![](images/clipboard-377067331.png)
+
+## Interpretation of R
+
+![](images/clipboard-930740139.png)
+
+## R-code for CCA from first priniciples
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
+if (!requireNamespace("DataTidy23RodoHonsMult", quietly = TRUE)) {
+# note that you'll need to reinstall the package
+# to get the latest version (as of 24 April 2024)
+# with the data set
+remotes::install_github("MiguelRodo/DataTidy23RodoHonsMult@2024")
+}
+data("corr_mat_profit", package = "DataTidy23RodoHonsMult")
+library(kableExtra)
+library(dplyr)
+library(tidyverse)
+```
+
+Read in the correlation matrix
+
+```{r}
+corr_mat_profit
+```
+
+Partition correlation matrix according to $X^{(1)}$ and $X^{(2)}$
+
+```{r}
+
+rho11 <- corr_mat_profit[1:6,1:6]
+rho22 <- corr_mat_profit[7:8,7:8]
+rho12 <- corr_mat_profit[1:6,7:8]
+rho21 <- corr_mat_profit[7:8,1:6]
+
+```
+
+Calculate the individual matrices of $\rho_{11}^{-1/2}\rho_{12}\rho_{22}^{-1}\rho_{21}\rho_{11}^{-1/2}$ and obtaining eigen decomposition of this product
+
+```{r}
+
+# Eigen decomposition V D^{1/2} V'
+rho11inverse <- solve(rho11)
+
+# Sqrt of rho11inverse
+a.eig <- eigen(rho11inverse)
+rho11inverse.sqrt <- a.eig$vectors %*% diag(sqrt(a.eig$values)) %*% t(a.eig$vectors)
+
+rho22inverse <- solve(rho22)
+
+R <- rho11inverse.sqrt %*% rho12 %*% rho22inverse %*% rho21 %*% rho11inverse.sqrt
+R_eigen <- eigen(R)
+
+```
+
+Obtain canonical loadings: $a_1 = e'_k\rho_{11}^{-1/2}$ then get $b_1$ using fact that it is proportional to $\rho_{22}^{-1}\rho_{21}a_1$
+
+```{r}
+a_1 <- rho11inverse.sqrt %*% R_eigen$vectors[,1]
+
+b_p <- rho22inverse %*% rho21 %*% a_1
+```
+
+Calculate covariance of V and form diagonal matrix of variances
+
+```{r}
+V1_var <- 1/(sqrt(t(b1_p) %*% rho22 %*% b1_p))
+V1_var <- matrix(c(V1_var,V1_var),2,1)
+```
+
+Standardise b to unit variance
+
+```{r}
+b_1 <- b1_p * (V1_var)
+```
+
+Calculate **canonical correlation coefficients**
+
+```{r}
+rho_1 <- sqrt(R_eigen$values)
+```
+
+Put canonical coefficients for ease of interpretation
+
+```{r}
+A_z <- t(matrix(a_1))
+B_z <- t(matrix(b_1))
+```
+
+Calculate correlations between canonical variates and measured variables (correlation matrices $\boldsymbol{\rho}_{U_1,\boldsymbol{X}^{(1)}}$ and $\boldsymbol{\rho}_{V_1,\boldsymbol{X}^{(2)}}$)
+
+```{r}
+corr_U1Z1 <- A_z %*% rho11
+corr_V1Z2 <- B_z %*% rho22
+```
+
+## R function cc from R library CCA
+
+Provided 2 variables, the cc() function will perform CCA on them
+
+```{r}
+cc1 <- cc(skull, bone)
+```
+
+You can look at the raw canonical coefficients
+
+```{r}
+cc1$xcoef
+```
+
+![](images/clipboard-3045636184.png)
+
+```{r}
+cc1$ycoef
+```
+
+![Standardise the canonical coefficients of variables using diagonal matrix of the variable's standard deviations](images/clipboard-3968554999.png)
+
+![](images/clipboard-3266103508.png)
+
+Compute the canonical scores
+
+![Display loadings](images/clipboard-2587687519.png)
+
+![](images/clipboard-2587687519.png)
+
+# Co
