@@ -1,0 +1,931 @@
+---
+title: "Section B: Olive Delights"
+format: html
+editor: visual
+---
+
+```{r}
+#| warning: false
+# Libraries 
+
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library(ggbiplot)
+```
+
+# Principal Component Analysis (PCA)
+
+## Set-up
+
+```{r}
+#| echo: false
+#| warning: false
+if (!requireNamespace("remotes", quietly = TRUE)) {
+install.packages("remotes")
+}
+# be sure to install from `2024` branch (code below does this)
+remotes::install_github("MiguelRodo/DataTidy23RodoHonsMult@2024")
+data("data_tidy_mali", package = "DataTidy23RodoHonsMult")
+```
+
+## Scatterplots
+
+Construct two-dimensional scatterplots of family versus distrd and of distrd versus cattle and remove any obvious outliers from the data set.
+
+```{r}
+
+par(mfrow = c(1,2), oma = c(0,0,2,0))
+
+plot(data_tidy_mali$family, data_tidy_mali$dist_rd, main = "Family vs Distrd",
+     xlab = "family",
+     ylab = "distrd",
+     pch = 19)
+
+plot(data_tidy_mali$dist_rd, data_tidy_mali$cattle, main = "Family vs Distrd",
+     xlab = "family",
+     ylab = "distrd",
+     pch = 19)
+
+
+mtext("Scatterplots of Selected Variables", outer = TRUE, cex = 1.5)
+
+
+# GGPlot version
+gg1 <- ggplot(data = data_tidy_mali, aes(x = family, y = dist_rd)) +
+  geom_point() 
+
+gg2 <- ggplot(data = data_tidy_mali, aes(x = dist_rd, y = cattle)) + 
+  geom_point()
+```
+
+We can see there are outliers, so we are gonna filter using the tidyr and dplyr
+
+```{r}
+filtered_data <- data_tidy_mali |> filter(family <= 100, dist_rd <= 150, cattle <= 100)
+
+par(mfrow = c(1,2), oma = c(0,0,2,0))
+
+plot(filtered_data$family, filtered_data$dist_rd, main = "Family vs Distrd",
+     xlab = "family",
+     ylab = "distrd",
+     pch = 19)
+
+plot(filtered_data$dist_rd, filtered_data$cattle, main = "Family vs Distrd",
+     xlab = "family",
+     ylab = "distrd",
+     pch = 19)
+
+
+mtext("Scatterplots of Selected Variables", outer = TRUE, cex = 1.5)
+
+# Filtered plots
+Fplot_1 <- ggplot(data = filtered_data, aes(x = family, y = dist_rd)) +
+  geom_point() 
+
+Fplot_2 <- ggplot(data = filtered_data, aes(x = dist_rd, y = cattle)) + 
+  geom_point()
+```
+
+**par** is used to put multiple plots on screen, **mfrow** has you pass in a vector contain the number of rows and cols to be used, **oma** assigns the size of margins.
+
+## PCA Using Eigen Function
+
+*Perform a principal component analysis using the correlation matrix using the function eigen. Determine the number of components to effectively summarize the variability*
+
+```{r}
+# First you need to standardise if the data has variables using different units (which our data has)
+std_data <- scale(filtered_data)
+
+# Now we get the matrix using the correlation function
+cor_matrix <- cor(std_data)
+
+# Apply eigen decomposition
+eig_obj <- eigen(cor_matrix)
+
+# Assign row names corresponding to the variables and column names corresponding to the principal components
+eig_vec_matrix <- eig_obj$vectors
+rownames(eig_vec_matrix) <- paste0(colnames(filtered_data))
+colnames(eig_vec_matrix) <- paste0("PC", 1:ncol(filtered_data))
+
+# Display the eigenvector matrix (rounded to 2 significant figures)
+eig_vec_matrix |> signif(2)
+
+# Calculating the scores 
+# Score = data %*% eig_vectors_matrix 
+score <- std_data %*% eig_vec_mat
+
+# Scree plot to determine number of PCs
+plot(1:length(eig_obj$values),eig_obj$values/sum(eig_obj$values), 
+     type = "b", pch = 19, 
+     xlab = "Principal Component index", 
+     ylab = "Proportion of variance",
+     main = "Scree Plot")
+
+# We see the elbow is at 2
+abline(h = eig_obj$values[2]/sum(eig_obj$values), lty = 2, col = "red")  
+
+# Find scores of the necessary PCs
+reduced_scores <- score[ ,1:2]
+
+plot(reduced_scores[,1], reduced_scores[,2], xlab = "PC1", ylab = "PC2", main = "Score Plot: PC1 vs PC2")
+
+```
+
+You would use the variance-covariance matrix if you were to do **EIGEN DECOMPOSITION,** for this you would use the **var(data)** function and all other steps remain the same as in the above
+
+## PCA Using Singular Value Decomposition
+
+*Perform a PCA using the SVD, and confirm that the results match those using the correlation matrix.*
+
+```{r}
+# Get PC loadings from scaled data using SVD
+svd_data <- svd(std_data)
+
+(svd_data$v) |> `colnames<-`(paste0("PC", 1:ncol(svd_data$v))) |> 
+  `rownames<-`(colnames(filtered_data)) |>
+  signif(2) |> knitr::kable()
+
+loadings <- svd_data$v
+std_scores <- svd_data$u
+singular_vals <- svd_data$d
+
+# Calculate PC scores
+svd_scores <- std_scores %*% diag(singular_vals)
+
+# Format 
+colnames(svd_scores) <- paste0("PC", 1:ncol(svd_scores))
+rownames(svd_scores) <- rownames(std_data)
+
+reduced <- svd_scores[, 1:2] # Check they match the ones calculated above
+```
+
+## Correlations Between First PC and Individual Variables
+
+*Calculate correlations between the first principal component and individual variables, and compare these to the loadings.*
+
+```{r}
+# Obtain covariance matrix
+cov_mat <- cov(std_data) 
+
+# Get eigen info
+eig_obj <- eigen(cov_mat)
+P <- eig_obj$vectors
+D <- diag(eig_obj$values)
+var_mat <- diag(diag(cov_mat))
+
+numerator <- P %*% sqrt(D)
+corr_mat <- var_mat %*% numerator
+
+# Format values
+rownames(corr_mat) <- paste0(colnames(data_new))
+colnames(corr_mat) <- paste0("PC", 1:9)
+corr_mat[,1] |> signif(2) |> knitr::kable()
+```
+
+## Biplot
+
+*Generate a biplot of the first 2 principal components based on standardised variables and interpret.*
+
+```{r}
+# PCA by function rather than first principles
+pca <- prcomp(std_data, center = FALSE, scale. = FALSE)
+
+#  Plot biplot
+ggbiplot(pca, choices = c(1, 2)) +
+  ggtitle("Biplot of First Two Principal Components") +
+  xlim(-1, 2) + 
+  ylim(-2, 2) +
+  theme_minimal()
+```
+
+# Regression
+
+## First Principles
+
+### Multiple Regression
+
+#### Load the Data
+
+```{r}
+data("data_tidy_house_price", 
+     package = "DataTidy23RodoHonsMult")
+```
+
+#### Extract Response Matrix Y
+
+```{r}
+y_vec <- data_tidy_house_price$selling_price
+```
+
+#### Extract Predictor Matrix and Append Column of 1
+
+```{r}
+X_mat <- as.matrix(cbind(1, 
+               data_tidy_house_price|>select(-selling_price)))
+
+colnames(X_mat)[1] <- "intercept"
+```
+
+#### Obtain Estimated Regression Coefficient
+
+```{r}
+Xt <- t(X_mat)
+XtX_inv <- solve(Xt %*% X_mat)
+
+beta_vec <- XtX_inv %*% Xt %*% y_vec
+
+colnames(beta_vec) <- "estimate"
+```
+
+#### Assess Model
+
+To assess the model we calculate the $R^2$ statistic
+
+`{r} SST <- sum((y_vec - mean(y_vec))^2) SSE <- sum((y_vec - X_mat %*% beta_vec)^2)  SSR <- SST - SSE  R2 <- signif(SSR/SST, 2)}`
+
+An $R^2$ of 0.83 indicates that 83% of the variance in house prices is explained by the size and assessed value of the house
+
+This is a high value and suggests the model explain the response "well" (it is a good model)
+
+### Multivariate Regression
+
+#### Load the Data
+
+```{r}
+data("data_tidy_paper", 
+     package = "DataTidy23RodoHonsMult")
+```
+
+#### Extract the Response Matrix
+
+```{r}
+Y_mat <- as.matrix(data_tidy_paper |> select(-starts_with("pulp")))
+```
+
+#### Extract Data for Predictor Matrix and Prepend 1
+
+```{r}
+X_mat <- as.matrix(
+  cbind(1, 
+        data_tidy_paper |> 
+          select(starts_with("pulp"))))
+
+colnames(X_mat)[1] <- "intercept"
+```
+
+#### Estimated Regression Coefficients
+
+```{r}
+Xt <- t(X_mat)
+XtX_inv <- solve(Xt %*% X_mat)
+
+Beta_mat <- XtX_inv %*% Xt %*% Y_mat
+```
+
+## Built-in Function
+
+### Multiple Regression
+
+```{r}
+lm(selling_price ~ ., data = data_tidy_house_price) |> coef() |> signif(2)
+```
+
+### Multivariate Regression
+
+```{r}
+signif(coef(lm(cbind(paper_1, paper_2, paper_3, paper_4)~., data_tidy_paper), 2))
+
+```
+
+## Inference on 1 Response
+
+Load the dataset as per usual
+
+#### Extract 1 Response Variable
+
+```{r}
+Y_mat <- as.matrix(data_tidy_paper[, "paper_1", drop = F])
+colnames(Y_mat) <- "paper_1"
+```
+
+#### Extract Data for Predictor Matrix and Append Column of 1
+
+```{r}
+X_mat <- as.matrix(cbind(1, data_tidy_paper |> select(starts_with("pulp"))))
+colnames(X_mat)[1] <- "intercept"
+```
+
+#### Estimate the Coefficients
+
+```{r}
+Xt <- t(X_mat)
+XtX_inv <- solve(Xt %*% X_mat)
+
+beta_vec <- XtX_inv %*% Xt %*% Y_mat
+
+colnames(beta_vec) <- "estimate"
+```
+
+#### $\beta_{pulp_1}$ Confidence Interval
+
+To get the 95% confidence interval for the $\beta_{pulp_1}$ coefficient, we first get the **standard deviation**
+
+```{r}
+XtX_mat <- t(X_mat)%*%X_mat
+XtX_inv <- solve(XtX_mat)
+
+var_response <- sum((Y_mat - X_mat %*% beta_vec)^2)/(nrow(Y_mat)-ncol(X_mat))
+sd_beta_pulp1 <- sqrt(var_response)*sqrt(XtX_inv["pulp_1", "pulp_1"])
+signif(sd_beta_pulp1, 2)
+```
+
+We then get the relevant **t-distributed quantile**
+
+```{r}
+t_beta_pulp1 <- qt(0.975, nrow(Y_mat))
+signif(t_beta_pulp1, 2)
+```
+
+The **confidence interval** is then:
+
+```{r}
+CI <- (beta_vec[2]+c(-1,1)*t_beta_pulp1*sd_beta_pulp1)
+signif(CI, 2)
+
+```
+
+### Hypothesis Testing: $H_{0}: \beta_{pulp_1}=0$
+
+The **test statistic** is given by:
+
+```{r}
+t_stat <- beta_vec[2]/sd_beta_pulp1
+signif(t_stat, 2)
+```
+
+The **p-value** is therefore:
+
+```{r}
+signif((pt(-abs(t_stat), nrow(Y_mat)-ncol(X_mat))*2),2)
+```
+
+### Hypothesis Testing: $H_0: \beta^{(1)}= \mathbf{0}$
+
+We now test the hypothesis that $$
+\beta^{(1)} = \beta_1 = \beta_3 = \beta_4 = 0
+$$ We first extract $\mathbf{C}_1\mathbf{1}$:
+
+```{r}
+C11_mat <- XtX_inv[2:5, 2:5] # Extract everything other than the intercept col
+C11_mat <- C11_mat[-2, -2] # all rows except 2, all cols except 2
+
+signif(C11_mat, 2)
+```
+
+We now extract the relevant **estimates**:
+
+```{r}
+
+beta_vec_1 <- beta_vec[c(2, 4:5), , drop = F] # Extract row 2, 4, 5
+signif(beta_vec_1,2)
+
+```
+
+The **test statistic** is then:
+
+```{r}
+
+f_stat <- (t(beta_vec_1)%*%solve(C11_mat)%*%beta_vec_1)/length(beta_vec_1)/var_response
+
+signif(f_stat, 2)
+
+```
+
+This yields the following **p-value**:
+
+```{r}
+
+pval <- pf(f_stat, length(beta_vec_1), nrow(Y_mat)-ncol(X_mat), lower.tail = F)
+signif(pval, 2)
+
+```
+
+## Inference on 2 Responses
+
+Suppose we wish to test that $$
+\beta^{(1)} = \mathbf{0}
+$$ Where $$
+\beta = \begin{pmatrix}\beta^{(1)}\\ \beta^{(2)}\end{pmatrix}
+$$ and $\beta^{(1)}: q \times r$
+
+This is the hypothesis that the first $q$ predictors have **no effect** on any of the $r$ responses
+
+-   We need to fit a model without the first $q$ predictors and compare the fit of the 2 models
+
+    ```{r}
+    # Load Data 
+    data("data_tidy_paper", package = "DataTidy23RodoHonsMult")
+
+    # We will test whether pulp2 or pulp3 will have an effect on any paper type
+
+    # Extract response matrix
+    Y_mat <- as.matrix(data_tidy_paper |> select(-starts_with("pulp")))
+    ```
+
+-   Let's define: $\mathbf{X}^{(2)}: n \times (k-1)$ for $i = 1,2$ as follows: $$
+    \mathbf{X} = \begin{pmatrix} \mathbf{X}^{(1)} & \mathbf{X}^{(2)} \end{pmatrix}
+    $$
+
+    ```{r}
+    # Extract predictor matrix and append 1's
+    X_mat <- as.matrix(cbind(1, data_tidy_paper|>select(starts_with("pulp"))))
+    colnames(X_mat)[1] <- "intercept"
+
+    # We are testing that the predictors we choose have NO effect on response so X2 is everything else
+    X_mat2 <- X_mat[, -(3:4), drop = F] # Get rid of cols 3 and 4 belonging to predictors pulp 2 and pulp 3
+
+    ```
+
+-   Under the implicit assumption that $\beta^{(1)}= \mathbf{0}$, we obtain the **estimated regression parameters** as $$
+    \hat{\beta}^{(2)} = (\mathbf{X}^{(2)'}\mathbf{X}^{(2)})^{-1}\mathbf{X}^{(2)'}\mathcal{y}
+    $$
+
+    ```{r}
+    # Get estimated regression coefficients under full and reduced models
+    B_mat <- solve(t(X_mat)%*%X_mat)%*%t(X_mat)%*%Y_mat
+
+    B_mat2 <- solve(t(X_mat2)%*%X_mat2)%*%t(X_mat2)%*%Y_mat
+    ```
+
+-   And the MLE variance-covariance matrices as $$
+    \hat{\Sigma}_{MLE} = \frac{1}{n}(\mathcal{y}-\mathbf{X}\hat{\beta})'(\mathcal{y}-\mathbf{X}\hat{\beta})
+    $$
+
+    ```{r}
+    # Get variance-covariance matrix of full model
+    n <- nrow(Y_mat)
+    Sigma_mat <- t((Y_mat - X_mat %*% B_mat))%*%(Y_mat - X_mat %*% B_mat)/n
+    ```
+
+-   And $$
+    \hat{\Sigma}^{(2)}_{MLE} = \frac{1}{n}(\mathcal{y}-\mathbf{X}^{(2)}\hat{\beta}^{(2)})'(\mathcal{y}-\mathbf{X}^{(2)}\hat{\beta}^{(2)})
+    $$
+
+    ```{r}
+    # Get variance-covariance matrix of reduced model
+    n <- nrow(Y_mat)
+    Sigma_mat2 <- t((Y_mat - X_mat2 %*% B_mat2))%*%(Y_mat - X_mat2 %*% B_mat2)/n
+    ```
+
+-   The **test statistic** is then $$
+    \Lambda = \frac{ \displaystyle \max_{\mathcal{B}^{(2)}, \boldsymbol{\Sigma}^{(2)}} L(\mathcal{B}^{(2)}, \boldsymbol{\Sigma}^{(2)}) }
+              { \displaystyle \max_{\mathcal{B}, \boldsymbol{\Sigma}} L(\mathcal{B}, \boldsymbol{\Sigma}) },
+    \quad
+    = \left( \frac{ |\boldsymbol{\hat{\Sigma}}| }{ |\boldsymbol{\hat{\Sigma}}^{(2)}| } \right)^{n/2}
+    $$
+
+-   For $n-r$ and $n-k$ sufficiently large, the following approximation (for the **test statistic**) holds: $$
+    -[n-k-0.5(r-p+q+1)]ln(\Lambda^{2/n})\sim\chi_{r(p-1)}
+    $$
+
+    This approximation is a **likelihood ratio test**
+
+    ```{r}
+    # Sufficiently large so use approximation
+    n <- nrow(Y_mat)
+    r <- ncol(Y_mat)
+    q <- ncol(X_mat) - ncol(X_mat2)
+    k <- ncol(X_mat)
+    p <- k-1
+
+    test_stat <- -(n-k-0.5*(r-p+q+1))*log(det(Sigma_mat)/det(Sigma_mat2))
+
+    signif(test_stat, 2)
+    ```
+
+-   Then you can determine the **p-value** of your test statistic
+
+    ```{r}
+    df <- r*q
+
+    pval <- 1 - pchisq(test_stat, df)
+
+    signif(pval, 2)
+    ```
+
+## Principal Component Regression
+
+> I am doing these from first principles. The goal is to predict the quantity of cotton planted using the other variables.
+
+```{r}
+#| echo: false
+#| warning: false
+# Required stuff for the example
+if (!requireNamespace("DataTidy23RodoSTA2005SAssignment", quietly = TRUE)) {
+  if (!requireNamespace("remotes", quietly = TRUE)) {
+    utils::install.packages("remotes")
+  }
+  remotes::install_github("MiguelRodo/DataTidy23RodoSTA2005SAssignment")
+}
+if (!requireNamespace("tibble", quietly = TRUE)) {
+  install.packages("tibble")
+}
+ # ensures dataframes print more informatively and concisely than standard met
+
+if (!requireNamespace("remotes", quietly = TRUE)) {
+  install.packages("remotes")
+}
+remotes::install_github("MiguelRodo/DataTidy23RodoHonsMult@2024")
+```
+
+```{r}
+# Libraries and Data
+data("data_tidy_mali", package = "DataTidy23RodoHonsMult")
+
+library(tibble)
+library(dplyr)
+library(knitr)
+```
+
+We replace the original predictors with principal components
+
+The method is:
+
+1.  Calculate the principal components of the (non-intercept) predictors
+2.  Fit a multiple regression model using the first $m$ principal components as predictors
+
+You can then do analysis after
+
+::: callout-note
+## GPT Steps
+
+-   Standardise the predictors (Z = scale(X))
+
+-   Perform PCA on the standardised predictors
+
+    -   PCs (scores) = $ZV$
+
+    -   Loadings (eigenvectors) = $V$
+
+    -   Eigenvalues = $\lambda$'s
+
+-   Select top K principal components that explain most of the variance based on
+
+    -   Scree plot
+
+    -   Cumulative variance explained
+
+    -   Cross validation
+
+-   Let $Z_k = ZV_k$ be the scores on the top K PCs
+
+-   Regress the response on the selected PCs
+
+    -   $\hat{Y} = Z_k\beta_k + \epsilon$
+
+-   Transform coefficients back to original predictor space (optional)
+
+    -   $\hat{\beta}_{original}=V_k\hat{\beta}_k$
+
+-   Use model for prediction
+:::
+
+### Getting Principal Components
+
+```{r}
+# Get all the numerical data since that is what we can work with
+numeric_vars <- data_tidy_mali[, sapply(data_tidy_mali, is.numeric)]
+
+# Extract response
+Y_mat <- as.matrix(data_tidy_mali$cotton)
+
+# Extract predictors 
+X_mat <- as.matrix(numeric_vars |> select(-starts_with("cotton")))
+
+# Standardise
+Xbar <- colMeans(X_mat) # Mean of each col
+Xsd <- apply(X_mat, 2, sd) # Standard deviation of each predictor
+Xstandard <- scale(X_mat, center = Xbar, scale = Xsd)
+
+# Do the Eigen Decomposition
+S <- cov(Xstandard)
+eig_obj <- eigen(S)
+eig_vec_matrix <- eig$vectors
+eigvals <- eig$values
+
+# Calculate the Scores
+Z <- Xstandard %*% eig_vec_matrix
+
+```
+
+Now we can select the number of components using 1 of 3 metrics:
+
+-   Scree Plot (subjective to human preference):
+
+    ```{r}
+    # Scree plot to determine number of PCs
+    plot(
+      eigvals, type = "b", pch = 19, xlab = "Principal Component",
+      ylab = "Eigenvalue", main = "Scree Plot (Variance Explained by PCs)"
+    )
+    abline(v = which.max(diff(diff(eigvals)) < 0), col = "red", lty = 2)
+
+    # You can plot the eigvals as they are the variance explained by your PCs
+    ```
+
+-   Cumulative Variance Plot:
+
+    ```{r}
+    # Using a cumulative variance plot
+    var_explained <- eigvals/sum(eigvals)
+    cumulative_var <- cumsum(var_explained)
+
+    plot(
+      cumulative_var,
+      type = "b", pch = 19,
+      xlab = "Number of Components",
+      ylab = "Cumulative Variance Explained",
+      main = "Cumulative Variance"
+    )
+    abline(h = 0.9, col = "blue", lty = 2)
+    ```
+
+    Get number of components that explains 90% of the variance
+
+-   Kaiser Criterion:
+
+    This revolves around selecting a number of principle components based on how many eigen values are greater than 1
+
+    ```{r}
+    # Kaiser Criterion
+    kaiser <- sum(eigvals > 1)
+    ```
+
+### Doing the PCR
+
+Now that we have the number of principal components we want to use, we can do the PCR and analysis
+
+```{r}
+# PCR ==================================================
+k <- kaiser
+Z_k <- Z[, 1:k]
+
+Z_k <- cbind(1, Z_k)
+Beta_k <- solve(t(Z_k)%*%Z_k)%*%t(Z_k)%*%Y_mat
+Yhat <- Z_k%*%Beta_k
+resids <- Y_mat - Yhat
+# ======================================================
+
+# Analysis =============================================
+RSS <- sum(resid^2)
+TSS <- sum((Y_mat-mean(Y_mat))^2)
+R2 <- 1- RSS/TSS #unadjusted R2 squared 
+RMSE <- sqrt(mean(resids^2))
+
+# Adjusted R2
+n <- nrow(Y2)
+top <- RSS2/(n-k-1)
+bot <- TSS2/(n-1)
+adj_R2 <- 1- top/bot
+```
+
+## Partial Least Squares
+
+```{r}
+library(pls)
+```
+
+![](images/clipboard-375876918.png)
+
+```{r}
+# Build PLS model (for visualization and CV)
+pls_cv <- plsr(cotton ~ ., data = data_tidy_mali,
+               scale = TRUE, validation = "CV")
+
+# Plot cross-validated MSE (this is your scree-style plot)
+validationplot(pls_cv, val.type = "MSEP", main = "PLS CV Error vs Components")
+
+# Setup ========================================================================
+# Extract response
+Y_mat <- as.matrix(data_tidy_mali$cotton)
+
+# Extract predictors 
+X_mat <- as.matrix(numeric_vars |> select(-starts_with("cotton")))
+# ==============================================================================
+
+# Step 1: Standardise ==========================================================
+Xbar <- colMeans(X_mat) # Mean of each col
+Xsd <- apply(X_mat, 2, sd) # Standard deviation of each predictor
+Xstandard <- scale(X_mat, center = Xbar, scale = Xsd)
+Xtemp <- Xstandard
+Ytemp <- Y_mat
+# ==============================================================================
+
+# Choose k = 3 becasue it is better
+n <- nrow(Y_mat)
+k <- 1
+p <- 8 # Number of predictors 
+
+
+# Theta, W and Z for each component
+
+W <- matrix(nrow = p, ncol = k)
+Z <- matrix(nrow = n, ncol = k)
+Theta <- numeric(k)
+
+for(i in 1:k){
+# Step 2a: compute z_m ========================================================
+  w_i <- t(Xtemp) %*% Y_mat # this gives vector of ϕ_{mj}
+  w_i <- w_i/sqrt(sum(w_i^2)) #normalization
+  z_i <- Xtemp %*% w_i # z_m = X^{(m-1)} * w
+# =============================================================================
+  
+# Step 2b: Estimate \hat{\theta}_m ============================================
+  theta_i <- as.numeric(t(z_i)%*%Ytemp/(t(z_i)%*%z_i))
+# =============================================================================
+  
+# Step 2d: Orthoganalisation ========   
+  Xtemp <- Xtemp - z_i %*% t(t(Xtemp) %*% z_i / as.numeric(t(z_i) %*% z_i))
+# ==========================  
+
+  Ytemp <- Ytemp - theta_i * z_i
+  
+  W[,i] <- w_i
+  Z[,i] <- z_i
+  Theta[i] <- theta_i
+}
+# Step 2c: Update fitted vals ===================
+Yhat_pls <- Z%*%Theta
+# ===============================================
+
+# Step 3: Recover Fitted Model and Coefficients ===============
+beta_scaled <- W%*%Theta
+beta_pls <- beta_scaled/Xsd
+intercept_pls <- mean(Y_mat)-sum(beta_pls*Xbar)
+# =============================================================
+
+# Prediction
+Y_predict <- X_mat%*%beta_pls+intercept_pls
+
+# Analysis
+RSS_pls <- sum((Y2-Y_predict)^2)
+TSS_pls <- sum((Y2-mean(Y2))^2)
+adj_R2_pls <- 1 - (RSS_pls/(n-k-1))/(TSS_pls/(n-1))
+RMSE_pls <- sqrt(mean((Y2-Y_predict)^2))
+
+R2 <- 1 - RSS_pls/TSS_pls
+
+cat("Adjusted R^2: ", adj_R2_pls, "\nResidual Mean Square Error: ", RMSE_pls)
+```
+
+# Factor Analysis (FA)
+
+We deal with the simplest model the **orthogonal factor model**
+
+-   Relationship between variables and factors = linear
+
+-   Factors uncorrelated with each other
+
+-   Factors uncorrelated with error terms
+
+## Orthogonal Factor Model
+
+![](images/clipboard-231195592.png)
+
+![](images/clipboard-2063867297.png)
+
+![](images/clipboard-1143187428.png)
+
+![](images/clipboard-3043158326.png)
+
+### Source of Correlation Between Observed Variables
+
+In the **OFM:**
+
+-   Error terms are uncorrelated
+
+-   Factor terms are uncorrelated
+
+-   Factors are uncorrelated with error terms
+
+How do we then get correlation between observed variables? -\> Same factor contributing to 2 variables will induce correlation between them
+
+### Principal Component Method
+
+> This mazimises the **total variance explained** (including unique + common variance). Finds components that account for the most overall variability in the dataset. **Flexible**
+
+-   Notes say we use the covariance matrix but we apparently use the correlation matrix because of scaling
+
+```{r}
+data <- read.csv("Air Pollution Data .csv")
+```
+
+#### Step 1: Use the sample correlation matrix
+
+Since variable are often on different scales, we use the correlation matrix \$R \$instead of the covariance matrix $S$
+
+```{r}
+corr_mat <- cor(data)
+```
+
+#### Step 2: Perform eigen decomposition
+
+$$
+R = VDV^T
+$$$D = diag(\lambda_1, \dots, \lambda_p):$ eigenvalues (descending order)
+
+$V = [v_1, \dots, v_p]:$ corresponding orthonormal eigenvectors
+
+```{r}
+eig_obj <- eigen(corr_mat)
+eig_vals <- eig_obj$values
+eig_vec <- eig_obj$vectors
+```
+
+#### Step 3: Estimate factor loadings from principal componenets
+
+Take the first $m$ components to estimate the loadings $$
+\tilde{L} = V_mD_m^{1/2}
+$$ $V_m$ = matrix of first $m$ eigenvectors $D_m$ = diag of first $m$ eigenvalues
+
+This gives $$
+\hat{\Sigma} = \tilde{L}\tilde{L}^T
+$$
+
+```{r}
+# For the first m = 1 
+L_1 <- eig_vec[, 1:1]*(sqrt(eig_vals[1]))
+
+# For the first m = 2
+L_2 <- eig_vec[, 1:2]%*%diag(sqrt(eig_vals[1:2]))
+
+# General: L_m <- eig_vec[, 1:m]%*%diag(sqrt(eig_vals[1:m])) for m>1
+```
+
+#### Step 4: Estimate specific variances
+
+$$
+\psi = \tilde{L} - diag(\tilde{L}\tilde{L}^T)
+$$
+
+```{r}
+# We will use m = 2 as an example here
+h <- diag(L_2%*%t(L_2))
+
+psi <- L_2 - h
+```
+
+This ensures that $R = \tilde{L}\tilde{L}^T+diag(\psi)$
+
+```{r}
+psi_mat <- diag(psi)
+
+reproduced_corr_mat <- L_2%*%t(L_2) + psi_mat
+```
+
+Refer to code on pages 23-25 of the slides as my code doesn't work but does mean the same thing
+
+### Maximum Likelihood Method
+
+> This models the **shared variance (i.e. common variance only)** and finds the latent factors which best explain the **correlations among variables**, discounting measurement error or specific variance. More **Statistically Rigorous** if its assumptions are met
+
+-   This revolves around us using the factanal() function
+
+-   **Varimax rotation** is an orthogonal rotation aimed at maximising the variances of the squares of the factor loadings
+
+    -   Simplifies interpretation by pushing loadings toward 0 or high values (sparse and distinct)
+
+    -   Enhances simple structure
+
+    -   Makes factor meanings clearer
+
+```{r}
+FA <- factanal(factors = 2, covmat = corr_mat, rotation = "none")
+
+L_FA <- FA$loadings
+```
+
+## Interpretation
+
+![](images/clipboard-1060611511.png)
+
+![](images/clipboard-486159385.png)
+
+# Canonical Correlation Analysis
+
+Aims to describe relationships between 2 sets of variables $X_{p \times 1}^{(1)}$ and $X_{q \times 1}^{(2)}$ by focusing on the correlation between **linear** combinations of variables in one set to **linear** combinations of variables in another set
+
+Determine pair of linear combinations having largest correlation
+$$
+U_1 = a_{11}X_{1}^{(1)} + \dots + a_{1p}X_p^{(1)}
+$$
+and
+$$
+V_1 = b_{11}X_1^{(2)} + \dots + b_{1q}X_q^{(2)}
+$$
+Determine pair of lienar combinations having largest correlation among all pairs uncorrelated with initial pair, and so on
+
+**Canonical Variables** = The pairs of linear combinations
+**Canonical Correlations** = The correlations between canonical variables, which measure the strength of association between the 2 sets of variable
+Aim is reduction, concentrate high-dimensional relationship between 2 sets of variables into a few pairs of cannonical variables
