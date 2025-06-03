@@ -1206,7 +1206,9 @@ rp <- solve(Dr)%*%P
 cp <- solve(Dc)%*%t(P)
 
 ```
+
 ### Multiple Correspondence Analysis
+
 ```{r}
 
 data("HairEyeColor", package = "ca")
@@ -1220,3 +1222,111 @@ plot(mjca(data), mass = TRUE, contrib = "absolute", map = "colprincipal", arrows
 
 ```
 
+# Linear Discriminant Analysis
+
+> Only focusing on what the summary says to do
+
+```{r}
+# Simulation setup, we dont need to learn it but I want to use the data
+set.seed(2025)
+library(ggplot2); library(cowplot)
+
+# Simulate five groups, p = 10
+n <- 20       # observations per group
+p <- 10       # number of variables
+
+# Common covariance: diagonal matrix with variance 3 on X1, and 1 on X2–X10
+Sigma <- diag(c(3, rep(1, p - 1)))
+
+# Define group means so that they differ along the first five dimensions
+means <- lapply(1:5, function(i) {
+  mu <- rep(0, p)
+  mu[i] <- 3 * (i - 3)    # shifts: −6, −3, 0, 3, 6 on dimension i
+  mu
+})
+
+# Simulate the data
+dat <- do.call(rbind, lapply(1:5, function(i) {
+  data.frame(
+    group = factor(i),
+    MASS::mvrnorm(n, mu = means[[i]], Sigma = Sigma)
+  )
+}))
+
+# Name the columns X1…X10
+colnames(dat)[-1] <- paste0("X", seq_len(p))
+
+# Peek at the first few rows
+head(dat)
+```
+
+## Calculate between-class scatter matrix $B$ and within-class scatter matrix $W$
+
+```{r}
+X  <- as.matrix(dat[, -1]) # Remove intercept
+g  <- length(unique(dat$group)) # Number of groups
+n_i <- table(dat$group) # The sizes of groups
+N <- diag(n_i)
+G <- model.matrix(~ group-1, data = dat)
+
+
+bar_overall <- colMeans(X) # Overall mean
+bar_group <- solve(t(G)%*%G)%*%t(G)%*%X
+
+
+# Center everyting
+bar_group_c <- sweep(bar_group, 2, bar_overall)
+X_c <- X - G %*% bar_group
+
+
+B <- t(bar_group_c) %*% N %*% bar_group_c
+W <- t(X_c) %*% X_c
+
+```
+
+## Obtain the eigenvectors of $W^{-1}B$ and scale them such that $a_i^TS_{pooled}a_i = 1$ for $a_i$ in the direction of the $i^{th}$ eigenvector
+
+```{r}
+eig_obj <- eigen(solve(W) %*% B)
+eig_mat <- Re(eig_obj$vectors)
+S_pooled <- W / (sum(n_i) - g)
+sd_vec <- sqrt(diag(t(eig_mat) %*% S_pooled %*% eig_mat)) 
+eig_mat <- eig_mat %*% diag(1/sd_vec)
+eig_mat <- eig_mat[, 1:2]
+
+```
+
+## Interpret the scaled eigenvectors, as they are loading vectors
+
+## Calculate scores by taking dot product of the data matrix with the eigenvectors
+
+```{r}
+dat$LD1 <- as.numeric(as.matrix(X) %*% eig_mat[, 1])
+dat$LD2 <- as.numeric(as.matrix(X) %*% eig_mat[, 2])
+```
+
+## Plot first 2 scores to visualise class separation
+
+```{r}
+col_vec <- c(
+  "#1b9e77",
+  "#d95f02",
+  "#7570b3",
+  "#e7298a",
+  "#66a61e"
+) |>
+  toupper()
+ggplot(dat, aes(x = LD1, y = LD2, color = group)) +
+  geom_point(size =  3, alpha = 0.8) +
+  theme_cowplot() +
+  background_grid(major = "xy") +
+  labs(title = "LDA Projection (First Two Discriminants)", x = "LD1", y = "LD2") +
+  scale_colour_manual(
+    values = col_vec,
+    name = "Group"
+  )
+
+
+```
+
+## Interpret the plot in terms of class separation and the contributions of the original variables to observed separation
