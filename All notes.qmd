@@ -1099,4 +1099,124 @@ Compute the canonical scores
 
 ![](images/clipboard-2587687519.png)
 
-# Co
+# Correspondence Analysis
+
+![](images/clipboard-3036682249.png)
+
+![Key things to remember: P, r, c](images/clipboard-4244940013.png)
+
+-   P - rc' gives matrix of residuals
+
+-   Standardise individual residuals by dividing by $\sqrt{r_ic_j}$ where $r_ic_j$ is the product of your row and col totals
+
+-   Dr = diag(r), Dc = diag(c)
+
+-   Standardised resids matrix $S = D_r^{-1/2}(P-P_{ind})D_c^{-1/2}$
+
+## CA First Principles
+
+First load the data
+
+```{r}
+ratings <- structure(
+  c(
+    50, 30, 10, 1, 60, 80, 40, 2,
+    40, 60, 20, 1, 10, 30, 50, 4),
+  dim = c(4L, 4L),
+  dimnames = list(
+    c("High School", "Bachelor's", "Master's", "Doctorate"),
+    c("Action", "Drama", "Comedy", "Documentary"))
+)
+```
+
+Then we will compute the correspondence matrix $P$
+
+```{r}
+
+P <- ratings/sum(ratings)
+
+```
+
+Then get row and column totals $\mathbf{r}, \mathbf{c}$
+
+```{r}
+
+r <- apply(P, 1, sum)
+c <- apply(P, 2, sum)
+
+```
+
+Get the diagonals
+
+```{r}
+
+Dr <- diag(r)
+Dc <- diag(c)
+
+```
+
+Get the matrix of standardised residuals
+
+```{r}
+
+Dr_inv_sqrt <- diag(sqrt(1/r))
+Dc_inv_sqrt <- diag(sqrt(1/c))
+
+S <- Dr_inv_sqrt %*% (as.matrix(P) - r%*%t(c)) %*% Dc_inv_sqrt
+
+```
+
+Apply SVD to S
+
+```{r}
+
+svdS <- svd(S)
+
+```
+
+Compute the principle coordinates (give the coordinates for the biplot)
+
+-   Row: $F = D_r^{-1/2}UD$
+
+-   Col: $G = D_c^{-1/2}VD$
+
+```{r}
+
+U <- svdS$u
+V <- svdS$v
+D <- diag(svdS$d)
+
+Fco <- Dr_inv_sqrt %*% U %*% D
+Gco <- Dc_inv_sqrt %*% V %*% D
+
+```
+
+## Other things they may ask you to get
+
+Profiles:
+
+-   Row: $D_r^{-1}P$
+
+-   Col: $D_c^{-1}P^T$
+
+```{r}
+
+rp <- solve(Dr)%*%P
+
+cp <- solve(Dc)%*%t(P)
+
+```
+### Multiple Correspondence Analysis
+```{r}
+
+data("HairEyeColor", package = "ca")
+data <- HairEyeColor
+
+mjca(data, lambda = "adjusted")
+
+summary(mjca(data, lambda = "adjusted"))
+
+plot(mjca(data), mass = TRUE, contrib = "absolute", map = "colprincipal", arrows = c(TRUE,TRUE))
+
+```
+
